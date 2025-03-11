@@ -18,32 +18,14 @@
 
 #define OLED_RESET -1 
 
-// Super-robust EEPROM configuration
-#define EEPROM_SIZE 32  // Increase EEPROM size for even more redundancy
+// Simple EEPROM configuration
+#define EEPROM_SIZE 32  // Size of EEPROM to use
 #define EEPROM_MAGIC 0xAB  // Magic byte to verify EEPROM is initialized
-#define EEPROM_CRC_SEED 0x1D // CRC seed value
 
-// Main storage area
-#define CITY_ADDR1 0
-#define VERIFY_ADDR1 1
-#define MAGIC_ADDR1 2
-#define CRC_ADDR1 3
-
-// Redundant storage areas
-#define CITY_ADDR2 4
-#define VERIFY_ADDR2 5
-#define MAGIC_ADDR2 6
-#define CRC_ADDR2 7
-
-#define CITY_ADDR3 8
-#define VERIFY_ADDR3 9
-#define MAGIC_ADDR3 10
-#define CRC_ADDR3 11
-
-#define CITY_ADDR4 12
-#define VERIFY_ADDR4 13
-#define MAGIC_ADDR4 14
-#define CRC_ADDR4 15
+// Single EEPROM location for city storage
+#define CITY_ADDR 0
+#define VERIFY_ADDR 1
+#define MAGIC_ADDR 2
 
 // List of supported cities (must match dropdown options)
 const char* cityList[] = {
@@ -52,9 +34,12 @@ const char* cityList[] = {
     "Sibiu", "Arad", "Pitesti", "Baia Mare", "Buzau",
     "Satu Mare", "Botosani", "Ramnicu Valcea", "Suceava", "Piatra Neamt",
     "Drobeta-Turnu Severin", "Targu Mures", "Targoviste", "Focsani", "Tulcea",
-    "Alba Iulia", "Giurgiu", "Hunedoara", "Bistrita", "Resita"
+    "Alba Iulia", "Giurgiu", "Hunedoara", "Bistrita", "Resita",
+    // Adding missing county capitals (judet)
+    "Slobozia", "Alexandria", "Calarasi", "Vaslui", "Zalau", 
+    "Miercurea Ciuc", "Sfantu Gheorghe", "Braila", "Deva"
 };
-const int NUM_CITIES = 30;
+const int NUM_CITIES = 39; // Updated count with added cities
 
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -75,23 +60,6 @@ int cityIndex = 0; // Default to Bucharest (index 0)
 // Instead of using complex HTML, use a simple parameter
 WiFiManagerParameter custom_city_param("city", "City Index", "0", 2);
 
-// Add a function to calculate a simple 8-bit CRC
-byte calculateCRC(byte data) {
-    byte crc = EEPROM_CRC_SEED;
-    byte val = data;
-    
-    for (int i = 0; i < 8; i++) {
-        if ((crc & 0x01) ^ (val & 0x01)) {
-            crc = (crc >> 1) ^ 0x8C;
-        } else {
-            crc >>= 1;
-        }
-        val >>= 1;
-    }
-    
-    return crc;
-}
-
 void saveCityToEEPROMSafe(int index) {
     // Sanity check for valid index
     if (index < 0 || index >= NUM_CITIES) {
@@ -99,326 +67,109 @@ void saveCityToEEPROMSafe(int index) {
         index = 0;
     }
     
-    Serial.print("SAVING CITY INDEX TO EEPROM with MAXIMUM RELIABILITY: ");
-    Serial.println(index);
-    
-    // Calculate CRC
-    byte crc = calculateCRC(index);
+    Serial.print("SAVING CITY INDEX TO EEPROM: ");
+    Serial.print(index);
+    Serial.print(" (");
+    Serial.print(cityList[index]);
+    Serial.println(")");
     
     // Begin EEPROM session
     EEPROM.begin(EEPROM_SIZE);
     
-    // Prepare data for all locations before writing
+    // CLEAR city data first
+    Serial.println("Clearing previous city data from EEPROM...");
+    EEPROM.write(CITY_ADDR, 255);
+    EEPROM.write(VERIFY_ADDR, 0);
+    EEPROM.write(MAGIC_ADDR, 0);
     
-    // First location
-    EEPROM.write(CITY_ADDR1, index);
-    delay(5);  // Add delay between operations
-    EEPROM.write(VERIFY_ADDR1, 255 - index);
-    delay(5);
-    EEPROM.write(MAGIC_ADDR1, EEPROM_MAGIC);
-    delay(5);
-    EEPROM.write(CRC_ADDR1, crc);
-    delay(5);
+    // Commit the clear operation
+    EEPROM.commit();
+    delay(50);  // Wait for clear to complete
     
-    // Second location
-    EEPROM.write(CITY_ADDR2, index);
-    delay(5);
-    EEPROM.write(VERIFY_ADDR2, 255 - index);
-    delay(5);
-    EEPROM.write(MAGIC_ADDR2, EEPROM_MAGIC);
-    delay(5);
-    EEPROM.write(CRC_ADDR2, crc);
-    delay(5);
+    Serial.println("Writing new city data...");
     
-    // Third location
-    EEPROM.write(CITY_ADDR3, index);
-    delay(5);
-    EEPROM.write(VERIFY_ADDR3, 255 - index);
-    delay(5);
-    EEPROM.write(MAGIC_ADDR3, EEPROM_MAGIC);
-    delay(5);
-    EEPROM.write(CRC_ADDR3, crc);
-    delay(5);
+    // Now write the new city data
+    EEPROM.write(CITY_ADDR, index);
+    EEPROM.write(VERIFY_ADDR, 255 - index);
+    EEPROM.write(MAGIC_ADDR, EEPROM_MAGIC);
     
-    // Fourth location
-    EEPROM.write(CITY_ADDR4, index);
-    delay(5);
-    EEPROM.write(VERIFY_ADDR4, 255 - index);
-    delay(5);
-    EEPROM.write(MAGIC_ADDR4, EEPROM_MAGIC);
-    delay(5);
-    EEPROM.write(CRC_ADDR4, crc);
-    delay(5);
-    
-    // Commit changes with a forced flush
+    // Commit changes
     bool success = EEPROM.commit();
     
-    // Wait a substantial amount of time to ensure write completes
-    delay(200);
+    // Wait to ensure write completes
+    delay(100);
     
-    // Re-read all values to verify
-    int readBack1 = EEPROM.read(CITY_ADDR1);
-    int readBack2 = EEPROM.read(CITY_ADDR2);
-    int readBack3 = EEPROM.read(CITY_ADDR3);
-    int readBack4 = EEPROM.read(CITY_ADDR4);
-    
-    // Verify CRCs
-    byte readCRC1 = EEPROM.read(CRC_ADDR1);
-    byte readCRC2 = EEPROM.read(CRC_ADDR2);
-    byte readCRC3 = EEPROM.read(CRC_ADDR3);
-    byte readCRC4 = EEPROM.read(CRC_ADDR4);
+    // Re-read value to verify
+    int readBack = EEPROM.read(CITY_ADDR);
     
     // End EEPROM session
     EEPROM.end();
     
-    // Verify all locations
-    bool verify1 = (readBack1 == index && readCRC1 == crc);
-    bool verify2 = (readBack2 == index && readCRC2 == crc);
-    bool verify3 = (readBack3 == index && readCRC3 == crc);
-    bool verify4 = (readBack4 == index && readCRC4 == crc);
+    // Verify the save was successful
+    bool verified = (readBack == index);
     
-    Serial.println("EEPROM SAVE VERIFICATION RESULTS:");
-    Serial.print("Location 1: Read=");
-    Serial.print(readBack1);
-    Serial.print(", CRC=");
-    Serial.print(readCRC1, HEX);
+    Serial.print("EEPROM SAVE VERIFICATION: Read=");
+    Serial.print(readBack);
     Serial.print(" (Success: ");
-    Serial.print(verify1 ? "YES" : "NO");
-    Serial.println(")");
-    
-    Serial.print("Location 2: Read=");
-    Serial.print(readBack2);
-    Serial.print(", CRC=");
-    Serial.print(readCRC2, HEX);
-    Serial.print(" (Success: ");
-    Serial.print(verify2 ? "YES" : "NO");
-    Serial.println(")");
-    
-    Serial.print("Location 3: Read=");
-    Serial.print(readBack3);
-    Serial.print(", CRC=");
-    Serial.print(readCRC3, HEX);
-    Serial.print(" (Success: ");
-    Serial.print(verify3 ? "YES" : "NO");
-    Serial.println(")");
-    
-    Serial.print("Location 4: Read=");
-    Serial.print(readBack4);
-    Serial.print(", CRC=");
-    Serial.print(readCRC4, HEX);
-    Serial.print(" (Success: ");
-    Serial.print(verify4 ? "YES" : "NO");
+    Serial.print(verified ? "YES" : "NO");
     Serial.println(")");
     
     Serial.print("Overall EEPROM commit successful: ");
     Serial.println(success ? "YES" : "NO");
     
-    // If any verification failed, try again
-    if (!(verify1 && verify2 && verify3 && verify4)) {
+    // If verification failed, try again
+    if (!verified) {
         Serial.println("EEPROM VERIFICATION FAILED! Retrying after delay...");
         delay(500); // Wait longer before retry
         
         // Recursive call to try again
         saveCityToEEPROMSafe(index);
     } else {
-        Serial.println("EEPROM WRITE COMPLETELY VERIFIED!");
+        Serial.println("EEPROM WRITE VERIFIED!");
     }
 }
 
 int loadCityFromEEPROMSafe() {
     EEPROM.begin(EEPROM_SIZE);
     
-    // Read from all four storage locations
-    int index1 = EEPROM.read(CITY_ADDR1);
-    int verify1 = EEPROM.read(VERIFY_ADDR1);
-    int magic1 = EEPROM.read(MAGIC_ADDR1);
-    int crc1 = EEPROM.read(CRC_ADDR1);
-    
-    int index2 = EEPROM.read(CITY_ADDR2);
-    int verify2 = EEPROM.read(VERIFY_ADDR2);
-    int magic2 = EEPROM.read(MAGIC_ADDR2);
-    int crc2 = EEPROM.read(CRC_ADDR2);
-    
-    int index3 = EEPROM.read(CITY_ADDR3);
-    int verify3 = EEPROM.read(VERIFY_ADDR3);
-    int magic3 = EEPROM.read(MAGIC_ADDR3);
-    int crc3 = EEPROM.read(CRC_ADDR3);
-    
-    int index4 = EEPROM.read(CITY_ADDR4);
-    int verify4 = EEPROM.read(VERIFY_ADDR4);
-    int magic4 = EEPROM.read(MAGIC_ADDR4);
-    int crc4 = EEPROM.read(CRC_ADDR4);
+    // Read from storage location
+    int index = EEPROM.read(CITY_ADDR);
+    int verify = EEPROM.read(VERIFY_ADDR);
+    int magic = EEPROM.read(MAGIC_ADDR);
     
     EEPROM.end();
     
-    // Check validity of each storage location
-    bool valid1 = (verify1 == (255 - index1) && magic1 == EEPROM_MAGIC && crc1 == calculateCRC(index1));
-    bool valid2 = (verify2 == (255 - index2) && magic2 == EEPROM_MAGIC && crc2 == calculateCRC(index2));
-    bool valid3 = (verify3 == (255 - index3) && magic3 == EEPROM_MAGIC && crc3 == calculateCRC(index3));
-    bool valid4 = (verify4 == (255 - index4) && magic4 == EEPROM_MAGIC && crc4 == calculateCRC(index4));
+    // Check if data is valid
+    bool isValid = (index < NUM_CITIES && magic == EEPROM_MAGIC && verify == (255 - index));
     
-    Serial.println("EEPROM LOAD VERIFICATION:");
-    Serial.print("Location 1: Index=");
-    Serial.print(index1);
-    Serial.print(", Verify=");
-    Serial.print(verify1);
-    Serial.print(", Magic=");
-    Serial.print(magic1, HEX);
-    Serial.print(", CRC=");
-    Serial.print(crc1, HEX);
-    Serial.print(" (Expected CRC=");
-    Serial.print(calculateCRC(index1), HEX);
-    Serial.print(") (Valid: ");
-    Serial.print(valid1 ? "YES" : "NO");
-    Serial.println(")");
+    Serial.print("EEPROM LOAD: City index = ");
+    Serial.print(index);
+    Serial.print(" (");
+    Serial.print(index < NUM_CITIES ? cityList[index] : "INVALID");
+    Serial.print("), Valid: ");
+    Serial.println(isValid ? "YES" : "NO");
     
-    Serial.print("Location 2: Index=");
-    Serial.print(index2);
-    Serial.print(", Verify=");
-    Serial.print(verify2);
-    Serial.print(", Magic=");
-    Serial.print(magic2, HEX);
-    Serial.print(", CRC=");
-    Serial.print(crc2, HEX);
-    Serial.print(" (Expected CRC=");
-    Serial.print(calculateCRC(index2), HEX);
-    Serial.print(") (Valid: ");
-    Serial.print(valid2 ? "YES" : "NO");
-    Serial.println(")");
-    
-    Serial.print("Location 3: Index=");
-    Serial.print(index3);
-    Serial.print(", Verify=");
-    Serial.print(verify3);
-    Serial.print(", Magic=");
-    Serial.print(magic3, HEX);
-    Serial.print(", CRC=");
-    Serial.print(crc3, HEX);
-    Serial.print(" (Expected CRC=");
-    Serial.print(calculateCRC(index3), HEX);
-    Serial.print(") (Valid: ");
-    Serial.print(valid3 ? "YES" : "NO");
-    Serial.println(")");
-    
-    Serial.print("Location 4: Index=");
-    Serial.print(index4);
-    Serial.print(", Verify=");
-    Serial.print(verify4);
-    Serial.print(", Magic=");
-    Serial.print(magic4, HEX);
-    Serial.print(", CRC=");
-    Serial.print(crc4, HEX);
-    Serial.print(" (Expected CRC=");
-    Serial.print(calculateCRC(index4), HEX);
-    Serial.print(") (Valid: ");
-    Serial.print(valid4 ? "YES" : "NO");
-    Serial.println(")");
-    
-    // Count valid locations with the same index
-    int countBucharest = 0;
-    int countIasi = 0;
-    int countBrasov = 0;
-    int countArad = 0;
-    int countOther = 0;
-    
-    // Tally valid data
-    if (valid1) {
-        if (index1 == 0) countBucharest++;
-        else if (index1 == 3) countIasi++; // Iasi
-        else if (index1 == 6) countBrasov++; // Brasov
-        else if (index1 == 11) countArad++; // Arad
-        else countOther++;
+    if (isValid) {
+        Serial.print("Using city from EEPROM: ");
+        Serial.print(cityList[index]);
+        Serial.print(" (");
+        Serial.print(index);
+        Serial.println(")");
+    } else {
+        // Default to Bucharest if no valid data
+        index = 0; // Bucharest
+        Serial.println("No valid city found in EEPROM, defaulting to Bucharest (0)");
+        
+        // Save default city
+        saveCityToEEPROMSafe(index);
     }
     
-    if (valid2) {
-        if (index2 == 0) countBucharest++;
-        else if (index2 == 3) countIasi++;
-        else if (index2 == 6) countBrasov++;
-        else if (index2 == 11) countArad++;
-        else countOther++;
-    }
-    
-    if (valid3) {
-        if (index3 == 0) countBucharest++;
-        else if (index3 == 3) countIasi++;
-        else if (index3 == 6) countBrasov++;
-        else if (index3 == 11) countArad++;
-        else countOther++;
-    }
-    
-    if (valid4) {
-        if (index4 == 0) countBucharest++;
-        else if (index4 == 3) countIasi++;
-        else if (index4 == 6) countBrasov++;
-        else if (index4 == 11) countArad++;
-        else countOther++;
-    }
-    
-    // Determine winner by vote count
-    int selectedIndex = -1;
-    
-    Serial.println("EEPROM VOTING RESULTS:");
-    Serial.print("Bucharest (0): ");
-    Serial.println(countBucharest);
-    Serial.print("Iasi (3): ");
-    Serial.println(countIasi);
-    Serial.print("Brasov (6): ");
-    Serial.println(countBrasov);
-    Serial.print("Arad (11): ");
-    Serial.println(countArad);
-    Serial.print("Other indices: ");
-    Serial.println(countOther);
-    
-    // Find the highest count
-    if (countIasi > 0 && countIasi >= countBucharest && countIasi >= countBrasov && countIasi >= countArad && countIasi >= countOther) {
-        selectedIndex = 3; // Iasi
-        Serial.println("Selected Iasi (3) by vote count");
-    }
-    else if (countBrasov > 0 && countBrasov >= countBucharest && countBrasov >= countIasi && countBrasov >= countArad && countBrasov >= countOther) {
-        selectedIndex = 6; // Brasov
-        Serial.println("Selected Brasov (6) by vote count");
-    }
-    else if (countArad > 0 && countArad >= countBucharest && countArad >= countIasi && countArad >= countBrasov && countArad >= countOther) {
-        selectedIndex = 11; // Arad
-        Serial.println("Selected Arad (11) by vote count");
-    }
-    else if (countOther > 0 && countOther >= countBucharest && countOther >= countIasi && countOther >= countBrasov && countOther >= countArad) {
-        // Use any valid index from the "other" category
-        if (valid1 && index1 != 0 && index1 != 3 && index1 != 6 && index1 != 11) {
-            selectedIndex = index1;
-        } else if (valid2 && index2 != 0 && index2 != 3 && index2 != 6 && index2 != 11) {
-            selectedIndex = index2;
-        } else if (valid3 && index3 != 0 && index3 != 3 && index3 != 6 && index3 != 11) {
-            selectedIndex = index3;
-        } else if (valid4 && index4 != 0 && index4 != 3 && index4 != 6 && index4 != 11) {
-            selectedIndex = index4;
-        }
-        Serial.print("Selected other city by vote count: ");
-        Serial.println(selectedIndex);
-    }
-    else {
-        // Default to Bucharest if it has any votes, or if nothing else is valid
-        selectedIndex = 0;
-        Serial.println("Selected Bucharest (0) by default or vote count");
-    }
-    
-    // Sanity check on the index
-    if (selectedIndex < 0 || selectedIndex >= NUM_CITIES) {
-        selectedIndex = 0; // Default to Bucharest
-        Serial.println("Index out of range, defaulting to Bucharest (0)");
-    }
-    
-    // Re-save the selected index to all locations to ensure consistency
-    Serial.print("Re-saving selected index to ensure consistency: ");
-    Serial.println(selectedIndex);
-    saveCityToEEPROMSafe(selectedIndex);
-    
-    return selectedIndex;
+    return index;
 }
 
 // Function to initialize EEPROM with default values
 void initializeEEPROMSafe() {
-    Serial.println("Initializing EEPROM with default values and maximum reliability...");
+    Serial.println("Initializing EEPROM with default city (Bucharest)...");
     saveCityToEEPROMSafe(0); // Default to Bucharest
     Serial.println("EEPROM initialization complete.");
 }
@@ -459,25 +210,19 @@ void forceCity(const char* cityName) {
         cityIndex = forcedIndex;
         ::cityName = cityList[cityIndex];
         
-        // Save with maximum reliability
+        // Save with reliability
         saveCityToEEPROMSafe(cityIndex);
         
         // Double check it was saved correctly
         EEPROM.begin(EEPROM_SIZE);
-        int saved1 = EEPROM.read(CITY_ADDR1);
-        int saved2 = EEPROM.read(CITY_ADDR2);
-        int saved3 = EEPROM.read(CITY_ADDR3);
-        int saved4 = EEPROM.read(CITY_ADDR4);
+        int saved = EEPROM.read(CITY_ADDR);
         EEPROM.end();
         
-        Serial.print("Force-save verification: ");
-        Serial.print(saved1);
-        Serial.print(", ");
-        Serial.print(saved2);
-        Serial.print(", ");
-        Serial.print(saved3);
-        Serial.print(", ");
-        Serial.println(saved4);
+        Serial.print("Force-save verification: Read index = ");
+        Serial.print(saved);
+        Serial.print(" (Expected: ");
+        Serial.print(cityIndex);
+        Serial.println(")");
         
         // Show confirmation on the display
         oled.clearDisplay();
@@ -493,8 +238,7 @@ void forceCity(const char* cityName) {
         oled.print(cityIndex);
         oled.setCursor(0, 42);
         oled.print("Save verified: ");
-        oled.print((saved1 == cityIndex && saved2 == cityIndex && 
-                   saved3 == cityIndex && saved4 == cityIndex) ? "YES" : "NO");
+        oled.print(saved == cityIndex ? "YES" : "NO");
         oled.display();
         delay(4000);
     } else {
@@ -524,9 +268,9 @@ void setup() {
     initializeDHTSensor();
     initializeOLEDDisplay();
     
-    // IMPORTANT: If you specifically want to force Iasi, uncomment this line:
-    // Uncomment to override the city selection with Iasi
-    forceCity("Iasi");
+    // IMPORTANT: If you specifically want to force a city, uncomment this line:
+    // Uncomment and modify to override the city selection
+    // forceCity("Iasi"); // Example: force to Iasi
     
     // Show splash screen with city info
     Text_EAEA();
@@ -601,7 +345,15 @@ void setup() {
         // Get coordinates and fetch initial weather
         float lat, lon;
         if (getRomanianCityCoordinates(cityIndex, lat, lon)) {
+            Serial.print("Getting initial weather for: ");
+            Serial.print(cityName);
+            Serial.print(" at coordinates: ");
+            Serial.print(lat, 6);
+            Serial.print(", ");
+            Serial.println(lon, 6);
             getWeather(lat, lon);
+        } else {
+            Serial.println("ERROR: Could not get coordinates for city");
         }
     }
     
@@ -653,6 +405,15 @@ bool connectToWiFi() {
     
     // Set timeout for configuration portal
     wm.setConfigPortalTimeout(120); // 2 minutes timeout
+    
+    // Store previous city selection before configuration
+    int previousCityIndex = cityIndex;
+    String previousCityName = cityName;
+    
+    // Set initial city value in parameter
+    char cityIdxBuf[4];
+    sprintf(cityIdxBuf, "%d", cityIndex);
+    WiFiManagerParameter custom_city_param("city", "City Index", cityIdxBuf, 4);
     
     // Add a simpler parameter that's easier to retrieve
     wm.addParameter(&custom_city_param);
@@ -710,16 +471,43 @@ bool connectToWiFi() {
         String cityIdxStr = custom_city_param.getValue();
         int newCityIdx = cityIdxStr.toInt();
         
-        Serial.print("Selected city index: ");
+        Serial.print("Selected city index from WiFi manager: ");
         Serial.println(newCityIdx);
         
         // Validate and save if changed
         if (newCityIdx >= 0 && newCityIdx < NUM_CITIES && newCityIdx != cityIndex) {
+            // Clear out old city data before setting new city
             cityIndex = newCityIdx;
             cityName = cityList[cityIndex];
+            
+            // Save the new city index with the enhanced saving method
             saveCityToEEPROM(cityIndex);
-            Serial.print("City changed to: ");
-            Serial.println(cityName);
+            
+            Serial.print("City changed from ");
+            Serial.print(previousCityName);
+            Serial.print(" (");
+            Serial.print(previousCityIndex);
+            Serial.print(") to ");
+            Serial.print(cityName);
+            Serial.print(" (");
+            Serial.print(cityIndex);
+            Serial.println(")");
+            
+            // Show city change message
+            oled.clearDisplay();
+            oled.setTextSize(1);
+            oled.setCursor(0, 0);
+            oled.print("City changed!");
+            oled.setCursor(0, 12);
+            oled.print("From: ");
+            oled.print(previousCityName);
+            oled.setCursor(0, 24);
+            oled.print("To: ");
+            oled.print(cityName);
+            oled.display();
+            delay(2000);
+        } else {
+            Serial.println("City selection unchanged");
         }
     
         // Show connected message
@@ -788,6 +576,94 @@ void displayNotConnectedMessage() {
     oled.display();
 }
 
+// This function handles the button press to change city
+void handleCityChange() {
+    // Get previous city for feedback
+    String previousCity = cityName;
+    int previousIndex = cityIndex;
+    
+    // Update city index
+    cityIndex = (cityIndex + 1) % NUM_CITIES;
+    cityName = cityList[cityIndex];
+    
+    // Save to EEPROM - clear old data first
+    Serial.print("Changing city from ");
+    Serial.print(previousCity);
+    Serial.print(" (index ");
+    Serial.print(previousIndex);
+    Serial.print(") to ");
+    Serial.print(cityName);
+    Serial.print(" (index ");
+    Serial.print(cityIndex);
+    Serial.println(")");
+    
+    // Use the improved save function that clears first
+    saveCityToEEPROM(cityIndex);
+    
+    // Now verify the save was successful by reading it back
+    EEPROM.begin(EEPROM_SIZE);
+    int verifiedIndex = EEPROM.read(CITY_ADDR);
+    EEPROM.end();
+    
+    Serial.print("EEPROM verification after save: Read index = ");
+    Serial.print(verifiedIndex);
+    Serial.print(" (Expected: ");
+    Serial.print(cityIndex);
+    Serial.println(")");
+    
+    bool saveSuccess = (verifiedIndex == cityIndex);
+    
+    // Show feedback on display
+    oled.clearDisplay();
+    oled.setTextSize(1);
+    oled.setCursor(0, 0);
+    oled.print("City changed!");
+    oled.setCursor(0, 12);
+    oled.print("From: ");
+    oled.print(previousCity);
+    oled.setCursor(0, 24);
+    oled.print("To: ");
+    oled.print(cityName);
+    oled.setCursor(0, 40);
+    oled.print("Index saved: ");
+    oled.print(cityIndex);
+    oled.setCursor(0, 54);
+    oled.print("Save status: ");
+    oled.print(saveSuccess ? "SUCCESS" : "FAILED");
+    oled.display();
+    
+    // If save failed, try again
+    if (!saveSuccess) {
+        delay(1000);
+        Serial.println("EEPROM save verification failed, retrying...");
+        saveCityToEEPROM(cityIndex);
+    }
+    
+    // Wait a moment to show the message and debounce
+    delay(3000);
+    
+    // ADDED: Immediately get weather for the new city after change
+    if (WiFi.status() == WL_CONNECTED) {
+        float lat, lon;
+        if (getRomanianCityCoordinates(cityIndex, lat, lon)) {
+            // Log city info for debugging
+            Serial.print("Getting weather for new city ");
+            Serial.print(cityName);
+            Serial.print(" (index ");
+            Serial.print(cityIndex);
+            Serial.print(") at coordinates: ");
+            Serial.print(lat, 6);
+            Serial.print(", ");
+            Serial.println(lon, 6);
+            
+            // Force an immediate update for the new city
+            showDHTData = false; // Make sure we show weather data
+            getWeather(lat, lon);
+            delay(4000); // Show the new city weather a bit longer
+        }
+    }
+}
+
 void loop() {
     unsigned long currentMillis = millis();
 
@@ -816,6 +692,24 @@ void loop() {
         oled.print(WiFi.localIP().toString());
         oled.display();
         delay(2000);
+        
+        // Immediately get weather for the current city after connection
+        float lat, lon;
+        if (getRomanianCityCoordinates(cityIndex, lat, lon)) {
+            // Log city info for debugging
+            Serial.print("Getting weather for ");
+            Serial.print(cityName);
+            Serial.print(" (index ");
+            Serial.print(cityIndex);
+            Serial.print(") at coordinates: ");
+            Serial.print(lat, 6);
+            Serial.print(", ");
+            Serial.println(lon, 6);
+            
+            getWeather(lat, lon);
+        } else {
+            Serial.println("Failed to get coordinates for selected city");
+        }
     } else if (!isConnected && wasConnected) {
         // Just disconnected
         Serial.println("WiFi connection lost!");
@@ -884,77 +778,7 @@ void loop() {
         // Also cycle to next city if a button is pressed
         // For example, if a button on D3 is pressed
         if (digitalRead(D3) == LOW) {
-            // Get previous city for feedback
-            String previousCity = cityName;
-            int previousIndex = cityIndex;
-            
-            // Update city index
-            cityIndex = (cityIndex + 1) % NUM_CITIES;
-            cityName = cityList[cityIndex];
-            
-            // Save to EEPROM
-            Serial.print("Changing city from ");
-            Serial.print(previousCity);
-            Serial.print(" (index ");
-            Serial.print(previousIndex);
-            Serial.print(") to ");
-            Serial.print(cityName);
-            Serial.print(" (index ");
-            Serial.print(cityIndex);
-            Serial.println(")");
-            
-            saveCityToEEPROM(cityIndex);
-            
-            // Now verify the save was successful by reading it back
-            EEPROM.begin(EEPROM_SIZE);
-            int verifiedIndex1 = EEPROM.read(CITY_ADDR1);
-            int verifiedIndex2 = EEPROM.read(CITY_ADDR2);
-            int verifiedIndex3 = EEPROM.read(CITY_ADDR3);
-            int verifiedIndex4 = EEPROM.read(CITY_ADDR4);
-            EEPROM.end();
-            
-            Serial.print("EEPROM verification after save: Read indexes = ");
-            Serial.print(verifiedIndex1);
-            Serial.print(", ");
-            Serial.print(verifiedIndex2);
-            Serial.print(", ");
-            Serial.print(verifiedIndex3);
-            Serial.print(", ");
-            Serial.println(verifiedIndex4);
-            
-            bool saveSuccess = (verifiedIndex1 == cityIndex && 
-                               verifiedIndex2 == cityIndex && 
-                               verifiedIndex3 == cityIndex &&
-                               verifiedIndex4 == cityIndex);
-            
-            // Show feedback on display
-            oled.clearDisplay();
-            oled.setTextSize(1);
-            oled.setCursor(0, 0);
-            oled.print("City changed!");
-            oled.setCursor(0, 12);
-            oled.print("From: ");
-            oled.print(previousCity);
-            oled.setCursor(0, 24);
-            oled.print("To: ");
-            oled.print(cityName);
-            oled.setCursor(0, 40);
-            oled.print("Index saved: ");
-            oled.print(cityIndex);
-            oled.setCursor(0, 54);
-            oled.print("Save status: ");
-            oled.print(saveSuccess ? "SUCCESS" : "FAILED");
-            oled.display();
-            
-            // If save failed, try again
-            if (!saveSuccess) {
-                delay(1000);
-                Serial.println("EEPROM save verification failed, retrying...");
-                saveCityToEEPROM(cityIndex);
-            }
-            
-            // Wait a moment to show the message and debounce
-            delay(3000);
+            handleCityChange();
         }
     }
 
@@ -962,10 +786,26 @@ void loop() {
         getSensorValue();
         updateDisplay();
     } else {
-        // Display weather data
+        // Display weather data - ALWAYS use the current cityIndex
         float lat, lon;
-        getRomanianCityCoordinates(cityIndex, lat, lon);
-        getWeather(lat, lon);
+        if (getRomanianCityCoordinates(cityIndex, lat, lon)) {
+            // Log city and coordinates for every API call
+            Serial.print("API call for city: ");
+            Serial.print(cityName);
+            Serial.print(" (index ");
+            Serial.print(cityIndex);
+            Serial.print(") at coordinates: ");
+            Serial.print(lat, 6);
+            Serial.print(", ");
+            Serial.println(lon, 6);
+            
+            getWeather(lat, lon);
+        } else {
+            Serial.println("ERROR: Failed to get coordinates for city index: " + String(cityIndex));
+            // Fallback to sensor data if coordinates retrieval fails
+            getSensorValue();
+            updateDisplay();
+        }
     }
 
     delay(2000);  // Short delay to prevent rapid screen updates
@@ -1033,6 +873,34 @@ void getWeather(float lat, float lon) {
     WiFiClient client;
     
     if (WiFi.status() == WL_CONNECTED) {
+        // Verify that we're using the current city
+        Serial.println("\n--- WEATHER API CALL ---");
+        Serial.print("Current city from memory: ");
+        Serial.print(cityName);
+        Serial.print(" (index ");
+        Serial.print(cityIndex);
+        Serial.println(")");
+        
+        Serial.print("Using coordinates: Lat=");
+        Serial.print(lat, 6);
+        Serial.print(", Lon=");
+        Serial.println(lon, 6);
+        
+        // Verify coordinates match the city index
+        float cityLat, cityLon;
+        if (getRomanianCityCoordinates(cityIndex, cityLat, cityLon)) {
+            if (abs(cityLat - lat) > 0.001 || abs(cityLon - lon) > 0.001) {
+                // Coordinates don't match current city index - use correct ones
+                Serial.println("WARNING: Coordinates don't match current city index!");
+                Serial.print("Updating to use correct coordinates for ");
+                Serial.println(cityName);
+                lat = cityLat;
+                lon = cityLon;
+            } else {
+                Serial.println("Coordinates match current city index");
+            }
+        }
+        
         HTTPClient http;
         
         // Use HTTP instead of HTTPS
@@ -1042,6 +910,11 @@ void getWeather(float lat, float lon) {
         
         Serial.print("Weather URL: ");
         Serial.println(url);
+        Serial.print("Getting weather for: ");
+        Serial.print(cityName);
+        Serial.print(" (index ");
+        Serial.print(cityIndex);
+        Serial.println(")");
         
         http.begin(client, url);
         
@@ -1067,15 +940,18 @@ void getWeather(float lat, float lon) {
                 updateWeatherDisplay(temperature, windspeed);
             } else {
                 // If API response parsing fails, use local sensor
+                Serial.println("API response parsing failed, using local sensor");
                 getSensorValue();
                 updateDisplay();
             }
         } else {
             // If API call fails, use local sensor
+            Serial.println("API call failed, using local sensor");
             getSensorValue();
             updateDisplay();
         }
         http.end();
+        Serial.println("--- END WEATHER API CALL ---\n");
     }
 }
 
@@ -1248,6 +1124,43 @@ bool getRomanianCityCoordinates(int cityIdx, float &lat, float &lon) {
             lat = 45.2971;
             lon = 21.8898;
             break;
+        // Added missing county capitals with accurate coordinates
+        case 30: // Slobozia (Ialomița)
+            lat = 44.5659;
+            lon = 27.3629;
+            break;
+        case 31: // Alexandria (Teleorman)
+            lat = 43.9701;
+            lon = 25.3307;
+            break;
+        case 32: // Calarasi (Călărași)
+            lat = 44.2024;
+            lon = 27.3329;
+            break;
+        case 33: // Vaslui
+            lat = 46.6406;
+            lon = 27.7276;
+            break;
+        case 34: // Zalau (Sălaj)
+            lat = 47.1955;
+            lon = 23.0572;
+            break;
+        case 35: // Miercurea Ciuc (Harghita)
+            lat = 46.3570;
+            lon = 25.8046;
+            break;
+        case 36: // Sfantu Gheorghe (Covasna)
+            lat = 45.8679;
+            lon = 25.7873;
+            break;
+        case 37: // Braila
+            lat = 45.2692;
+            lon = 27.9574;
+            break;
+        case 38: // Deva (the actual county capital of Hunedoara)
+            lat = 45.8785;
+            lon = 22.9199;
+            break;
         default:
             return false;
     }
@@ -1263,66 +1176,44 @@ void testEEPROM() {
     // Check if EEPROM is available
     EEPROM.begin(EEPROM_SIZE);
     
-    // Read the magic byte from all locations to see if EEPROM has been initialized
-    byte magic1 = EEPROM.read(MAGIC_ADDR1);
-    byte magic2 = EEPROM.read(MAGIC_ADDR2);
-    byte magic3 = EEPROM.read(MAGIC_ADDR3);
-    byte magic4 = EEPROM.read(MAGIC_ADDR4);
-    
-    // Read indexes
-    byte index1 = EEPROM.read(CITY_ADDR1);
-    byte index2 = EEPROM.read(CITY_ADDR2);
-    byte index3 = EEPROM.read(CITY_ADDR3);
-    byte index4 = EEPROM.read(CITY_ADDR4);
+    // Read the storage location
+    byte cityIndex = EEPROM.read(CITY_ADDR);
+    byte verify = EEPROM.read(VERIFY_ADDR);
+    byte magic = EEPROM.read(MAGIC_ADDR);
     
     EEPROM.end();
     
     Serial.println("EEPROM CURRENT STATUS:");
-    Serial.print("Magic bytes: ");
-    Serial.print(magic1, HEX);
-    Serial.print(", ");
-    Serial.print(magic2, HEX);
-    Serial.print(", ");
-    Serial.print(magic3, HEX);
-    Serial.print(", ");
-    Serial.println(magic4, HEX);
+    Serial.print("Magic byte: ");
+    Serial.println(magic, HEX);
     
-    Serial.print("City indexes: ");
-    Serial.print(index1);
+    Serial.print("City index: ");
+    Serial.print(cityIndex);
     Serial.print(" (");
-    Serial.print(index1 < NUM_CITIES ? cityList[index1] : "INVALID");
-    Serial.print("), ");
-    Serial.print(index2);
-    Serial.print(" (");
-    Serial.print(index2 < NUM_CITIES ? cityList[index2] : "INVALID");
-    Serial.print("), ");
-    Serial.print(index3);
-    Serial.print(" (");
-    Serial.print(index3 < NUM_CITIES ? cityList[index3] : "INVALID");
-    Serial.print("), ");
-    Serial.print(index4);
-    Serial.print(" (");
-    Serial.print(index4 < NUM_CITIES ? cityList[index4] : "INVALID");
+    Serial.print(cityIndex < NUM_CITIES ? cityList[cityIndex] : "INVALID");
+    Serial.println(")");
+    
+    Serial.print("Verify byte: ");
+    Serial.print(verify);
+    Serial.print(" (Should be: ");
+    Serial.print(255 - cityIndex);
     Serial.println(")");
     
     // If EEPROM hasn't been initialized properly, do it now
     bool needsInit = false;
     
-    if (magic1 != EEPROM_MAGIC || magic2 != EEPROM_MAGIC || 
-        magic3 != EEPROM_MAGIC || magic4 != EEPROM_MAGIC) {
-        Serial.println("EEPROM not properly initialized (magic bytes don't match)");
+    if (magic != EEPROM_MAGIC) {
+        Serial.println("EEPROM not properly initialized (magic byte doesn't match)");
         needsInit = true;
     }
     
-    if (index1 >= NUM_CITIES || index2 >= NUM_CITIES || 
-        index3 >= NUM_CITIES || index4 >= NUM_CITIES) {
-        Serial.println("EEPROM contains invalid city indexes");
+    if (cityIndex >= NUM_CITIES) {
+        Serial.println("EEPROM contains invalid city index");
         needsInit = true;
     }
     
-    // Check if indexes are consistent
-    if (index1 != index2 || index1 != index3 || index1 != index4) {
-        Serial.println("EEPROM data is inconsistent across locations");
+    if (verify != (255 - cityIndex)) {
+        Serial.println("EEPROM verification byte doesn't match");
         needsInit = true;
     }
     
@@ -1330,7 +1221,7 @@ void testEEPROM() {
         Serial.println("EEPROM needs initialization. Initializing now...");
         initializeEEPROMSafe();
     } else {
-        Serial.println("EEPROM appears to be properly initialized and consistent.");
+        Serial.println("EEPROM appears to be properly initialized.");
     }
     
     // Force a test write/read cycle to verify EEPROM is working
