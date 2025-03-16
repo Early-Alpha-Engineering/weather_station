@@ -35,7 +35,6 @@ const char* cityList[] = {
     "Satu Mare", "Botosani", "Ramnicu Valcea", "Suceava", "Piatra Neamt",
     "Drobeta-Turnu Severin", "Targu Mures", "Targoviste", "Focsani", "Tulcea",
     "Alba Iulia", "Giurgiu", "Hunedoara", "Bistrita", "Resita",
-    // Adding missing county capitals (judet)
     "Slobozia", "Alexandria", "Calarasi", "Vaslui", "Zalau", 
     "Miercurea Ciuc", "Sfantu Gheorghe", "Braila", "Deva"
 };
@@ -410,44 +409,48 @@ bool connectToWiFi() {
     int previousCityIndex = cityIndex;
     String previousCityName = cityName;
     
-    // Set initial city value in parameter
+    // Set initial city value in parameter - will be hidden but still used
     char cityIdxBuf[4];
     sprintf(cityIdxBuf, "%d", cityIndex);
-    WiFiManagerParameter custom_city_param("city", "City Index", cityIdxBuf, 4);
     
-    // Add a simpler parameter that's easier to retrieve
+    // Create the parameter for the city index - we'll hide this visually
+    WiFiManagerParameter custom_city_param("city", "City Index", cityIdxBuf, 4);
     wm.addParameter(&custom_city_param);
     
-    // Add city selection HTML with CSS for styling and hidden input
-    String cityOptions = "<style>";
-    cityOptions += ".city-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }";
-    cityOptions += ".city-btn { flex: 1 0 45%; margin: 2px; padding: 8px 5px; background-color: #1fa3ec; color: #fff; border: none; border-radius: 4px; cursor: pointer; }";
-    cityOptions += ".city-btn.active { background-color: #007bff; }";
-    cityOptions += "#city { display: none; }"; // Hide the input field
-    cityOptions += "label[for='city'] { display: none; }"; // Hide the label
-    cityOptions += "</style>";
+    // Add CSS to hide the city index field
+    String css = "<style>"
+                "label[for='city'], input#city { display: none !important; }" // Hide the city index field
+                "select { width: 100%; padding: 8px; margin: 10px 0; border-radius: 4px; border: 1px solid #ccc; }"
+                "h3 { color: #1FA3EC; }"
+                "</style>";
+    WiFiManagerParameter custom_css(css.c_str());
+    wm.addParameter(&custom_css);
     
-    cityOptions += "<br><p><b>Select City:</b></p>";
-    cityOptions += "<div class='city-grid'>";
+    // Add a title
+    String title = "<h3>Weather Station Configuration</h3>";
+    WiFiManagerParameter custom_title(title.c_str());
+    wm.addParameter(&custom_title);
     
+    // Create a simple dropdown for city selection
+    String citySelect = "<p><b>Select Your City:</b></p>"
+                        "<select id='cityDropdown' onchange='document.getElementById(\"city\").value=this.value'>";
+    
+    // Add all cities as options
     for (int i = 0; i < NUM_CITIES; i++) {
-        String activeClass = (i == cityIndex) ? " active" : "";
-        cityOptions += "<button class='city-btn" + activeClass + "' onclick='document.getElementById(\"city\").value=\"" + 
-                      String(i) + "\"; highlightBtn(this)'>" + String(cityList[i]) + "</button>";
+        String selected = (i == cityIndex) ? " selected" : "";
+        citySelect += "<option value='" + String(i) + "'" + selected + ">" + String(cityList[i]) + "</option>";
     }
     
-    cityOptions += "</div>";
-    cityOptions += "<p>Currently selected: <b><span id='cityName'>" + String(cityList[cityIndex]) + "</span></b></p>";
+    citySelect += "</select>";
     
-    // Add JavaScript to highlight selected button
-    cityOptions += "<script>function highlightBtn(btn) { ";
-    cityOptions += "document.querySelectorAll('.city-btn').forEach(b => b.classList.remove('active')); ";
-    cityOptions += "btn.classList.add('active'); ";
-    cityOptions += "document.getElementById('cityName').innerHTML = btn.innerText;";
-    cityOptions += "}</script>";
-    
-    WiFiManagerParameter custom_html(cityOptions.c_str());
+    // Add the custom HTML
+    WiFiManagerParameter custom_html(citySelect.c_str());
     wm.addParameter(&custom_html);
+    
+    // Add instruction text
+    String instructions = "<p>Weather data will be shown for your selected city.</p>";
+    WiFiManagerParameter custom_instructions(instructions.c_str());
+    wm.addParameter(&custom_instructions);
     
     // Attempt to connect to WiFi with a clear message
     Serial.println("Starting WiFiManager connection process...");
@@ -1124,7 +1127,6 @@ bool getRomanianCityCoordinates(int cityIdx, float &lat, float &lon) {
             lat = 45.2971;
             lon = 21.8898;
             break;
-        // Added missing county capitals with accurate coordinates
         case 30: // Slobozia (Ialomița)
             lat = 44.5659;
             lon = 27.3629;
@@ -1133,7 +1135,7 @@ bool getRomanianCityCoordinates(int cityIdx, float &lat, float &lon) {
             lat = 43.9701;
             lon = 25.3307;
             break;
-        case 32: // Calarasi (Călărași)
+        case 32: // Călărași (Călărași)
             lat = 44.2024;
             lon = 27.3329;
             break;
