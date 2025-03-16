@@ -287,8 +287,6 @@ void setup() {
     oled.setCursor(0, 32);
     oled.print("EEPROM Index: ");
     oled.print(cityIndex);
-    oled.setCursor(0, 44);
-    oled.print("Press D3 to change city");
     oled.display();
     delay(3000);
 
