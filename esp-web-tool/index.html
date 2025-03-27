@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Instalare Firmware Stație Meteo</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <style>
+    body {
+      background-color: #f8f9fa;
+      padding-top: 50px;
+    }
+    .container {
+      max-width: 700px;
+    }
+    .esp-button-container {
+      margin-top: 30px;
+      text-align: center;
+    }
+    esp-web-install-button::part(button) {
+      background-color: #0d6efd;
+      color: white;
+      font-size: 1.2rem;
+      border-radius: 0.5rem;
+      padding: 0.75rem 2rem;
+    }
+    .device-image {
+      max-width: 100%;
+      height: auto;
+      margin: 20px 0;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .tech-specs {
+      background-color: #e9ecef;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container text-center">
+    <h1 class="mb-3">Instalează Firmware-ul Stației Meteo</h1>
+    <p class="lead">
+      Bine ai venit! Această pagină te ajută să instalezi rapid și ușor firmware-ul personalizat pe placa ta LOLIN(WEMOS) D1 R2 & mini pentru stația meteo.
+    </p>
+    <hr>
+    
+    <div class="row mb-4">
+      <div class="col-md-12">
+        <div class="tech-specs text-start">
+          <h5>Specificații Dispozitiv:</h5>
+          <ul>
+            <li><strong>Controller:</strong> LOLIN(WEMOS) D1 R2 & mini</li>
+            <li><strong>Microcontroller:</strong> ESP8266EX</li>
+            <li><strong>Conectivitate:</strong> WiFi 802.11 b/g/n</li>
+            <li><strong>Senzor temperatură/umiditate:</strong> DHT11</li>
+            <li><strong>Display:</strong> OLED 128×64 pixels</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    
+    <div class="text-start">
+      <h4>Instrucțiuni de instalare:</h4>
+      <ol>
+        <li>Deschide această pagină în Google Chrome sau Microsoft Edge.</li>
+        <li>Conectează placa WEMOS D1 R2 & mini la calculator prin cablul USB.</li>
+        <li>Apasă butonul de mai jos și urmează pașii pentru instalare.</li>
+        <li>Selectează portul COM corespunzător plăcii tale când ți se solicită.</li>
+        <li>Așteaptă finalizarea instalării. Este posibil să dureze până la un minut.</li>
+      </ol>
+      <p><strong>Notă:</strong> Dacă browserul sau contextul nu este suportat (ex: HTTP în loc de HTTPS), instalarea nu va funcționa. Această metodă de instalare permite actualizarea firmware-ului fără a instala drivere sau alte programe.</p>
+    </div>
+
+    <div class="esp-button-container">
+      <esp-web-install-button manifest="https://firmware.eaea.ro/manifest.json">
+        <button slot="activate">Instalează Firmware-ul</button>
+        <span slot="unsupported">Ah, din păcate browserul tău nu suportă această funcționalitate.</span>
+        <span slot="not-allowed">Conexiunea nu este securizată. Accesează pagina prin HTTPS.</span>
+      </esp-web-install-button>
+    </div>
+
+    <footer class="mt-5 text-muted">
+      <p>&copy; 2025 Early Alpha Engineering. Toate drepturile rezervate.</p>
+    </footer>
+  </div>
+</body>
+</html> 
