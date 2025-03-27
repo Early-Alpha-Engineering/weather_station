@@ -13,10 +13,13 @@
 #define SCREEN_HEIGHT 64
 
 #define DHTPIN D4
-#define DHTTYPE DHT11
+#define DHTTYPE DHT22  // Changed to DHT22 for better accuracy
 
 // Add this line to define the pull-up resistor pin
-#define DHTPULLUP_PIN D5  // Using D5 to avoid conflict with button on D3
+#define DHTPULLUP_PIN D4  // Using D5 to avoid conflict with button on D3
+
+// Add reset pin definition
+#define RESET_PIN D3  // Using D3 for reset button
 
 #define OLED_RESET -1 
 
@@ -253,6 +256,9 @@ void setup() {
     Serial.println("\n\n========= Weather Station Starting =========");
     Serial.println("Initializing...");
     
+    // Set up reset pin
+    pinMode(RESET_PIN, INPUT_PULLUP);  // Enable internal pull-up resistor
+    
     // Initialize EEPROM and test it first
     testEEPROM();
     
@@ -360,23 +366,35 @@ void setup() {
 }
 
 void initializeDHTSensor() {
+    Serial.println("\n--- INITIALIZING DHT SENSOR ---");
+    
     // Set up the pull-up resistor pin
     pinMode(DHTPULLUP_PIN, OUTPUT);
     digitalWrite(DHTPULLUP_PIN, HIGH);  // Enable pull-up
+    Serial.println("Pull-up pin configured");
     
     // Give the sensor time to stabilize before beginning
-    delay(1000);
+    delay(2000);
+    Serial.println("Initial delay complete");
+    
     dht.begin();
+    Serial.println("DHT.begin() called");
     
     // Allow sensor to initialize properly
     delay(2000);
+    Serial.println("Post-initialization delay complete");
     
     // First reading is often incorrect, so discard it
-    dht.readTemperature();
-    dht.readHumidity();
-    delay(50);
+    float initialTemp = dht.readTemperature();
+    float initialHum = dht.readHumidity();
+    Serial.print("Initial temperature reading: ");
+    Serial.println(initialTemp);
+    Serial.print("Initial humidity reading: ");
+    Serial.println(initialHum);
     
-    Serial.println("DHT sensor initialized.");
+    delay(100);
+    Serial.println("DHT sensor initialization complete");
+    Serial.println("--- END DHT INITIALIZATION ---\n");
 }
 
 void initializeOLEDDisplay() {
@@ -685,6 +703,16 @@ void handleCityChange() {
 void loop() {
     unsigned long currentMillis = millis();
 
+    // Check for reset button press
+    if (digitalRead(RESET_PIN) == LOW) {
+        Serial.println("Reset button pressed!");
+        delay(100);  // Debounce
+        if (digitalRead(RESET_PIN) == LOW) {  // Double check
+            Serial.println("Performing system reset...");
+            ESP.restart();
+        }
+    }
+
     // Check WiFi connection status more frequently and reliably
     wl_status_t wifiStatus = WiFi.status();
     static bool wasConnected = false;
@@ -835,23 +863,39 @@ void getSensorValue() {
     float humSum = 0;
     int validReadings = 0;
     
+    Serial.println("\n--- DHT SENSOR READING ---");
+    
     // Try up to 3 readings to get valid data
     for (int i = 0; i < 3; i++) {
+        Serial.print("Reading #");
+        Serial.println(i + 1);
+        
         float tempReading = dht.readTemperature();
         float humReading = dht.readHumidity();
         
+        Serial.print("Raw Temperature: ");
+        Serial.println(tempReading);
+        Serial.print("Raw Humidity: ");
+        Serial.println(humReading);
+        
         if (!isnan(tempReading) && !isnan(humReading)) {
+            Serial.println("Both readings are valid numbers");
             // Only include readings that are within reasonable range
-            // DHT11 temperature range is typically 0-50°C
-            if (tempReading >= 0 && tempReading <= 50) {
+            // DHT22 temperature range is typically -40 to 80°C
+            if (tempReading >= -40 && tempReading <= 80) {
+                Serial.println("Temperature is within valid range");
                 tempSum += tempReading;
                 humSum += humReading;
                 validReadings++;
+            } else {
+                Serial.println("Temperature is outside valid range");
             }
+        } else {
+            Serial.println("One or both readings are NaN");
         }
         
         // Wait between readings
-        delay(50);
+        delay(100);
     }
     
     // Only update values if we got valid readings
@@ -859,15 +903,16 @@ void getSensorValue() {
         temperature = tempSum / validReadings;
         humidity = humSum / validReadings;
         
-        Serial.print("DHT Temperature (avg of ");
+        Serial.print("Final Temperature (avg of ");
         Serial.print(validReadings);
         Serial.print(" readings): ");
         Serial.println(temperature);
-        Serial.print("DHT Humidity: ");
+        Serial.print("Final Humidity: ");
         Serial.println(humidity);
     } else {
         Serial.println("DHT sensor failed to get valid readings");
     }
+    Serial.println("--- END DHT READING ---\n");
 }
 
 void updateDisplay() {
