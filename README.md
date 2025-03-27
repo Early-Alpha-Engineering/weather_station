@@ -30,4 +30,5 @@ An ESP8266-based weather station that displays temperature and humidity from bot
 
 ## Version History
 
+- 1.0.1 - Fixed pull-up resistor issue with DHT sensor and added temperature reading validation
 - 1.0.0 - Initial release with improved DHT sensor reliability 
