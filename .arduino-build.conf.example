@@ -1,0 +1,26 @@
+# ESP8266 Weather Station Build Configuration Example
+# Copy this to .arduino-build.conf and customize as needed
+
+# Board settings
+PORT="/dev/cu.usbserial-1410"  # Update with your port
+SKETCH_PATH="weather_station.ino"
+BOARD="esp8266:esp8266:generic"
+CPU="80"  # 80 or 160 MHz
+UPLOAD_SPEED="115200"
+DEBUG_LEVEL="None"  # None, Basic, All
+FLASH_SIZE="4M1M"  # 4MB Flash with 1MB SPIFFS
+
+# Build settings
+BUILD_DIR="build"
+VERBOSE=false
+
+# Monitor settings
+MONITOR_BAUD_RATE="115200"
+
+# Options
+NO_UPLOAD=false
+MONITOR=false
+UPLOAD_SPIFFS=false
+ERASE_FLASH=true
+EXPORT_BIN=false
+TIME_UPLOADS=false 

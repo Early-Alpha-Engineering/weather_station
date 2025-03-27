@@ -1,2 +1,23 @@
+# Build directory
+/build/
+
+# Arduino CLI binary
+/bin/
+
+# Private keys
+*.key
+
+# Config files
+.arduino-build.conf
+
+# MacOS files
 .DS_Store
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+
 esp-web-tool/ 
